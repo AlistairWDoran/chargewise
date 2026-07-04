@@ -12,6 +12,7 @@ CSV columns (2018+ file):
 from __future__ import annotations
 
 import csv
+import re
 from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -61,6 +62,33 @@ def price_for_date(
         return None
     week = weeks[idx]
     return week.petrol_ppl if fuel == "petrol" else week.diesel_ppl
+
+
+def extract_csv_url(html: str) -> str:
+    """Find the weekly road fuel prices CSV asset URL in the landing-page HTML.
+
+    GOV.UK publishes both an ODS and a CSV ("CSV, 2018 to present"); we want the
+    CSV. Pure so it can be unit-tested without a network call.
+    """
+    matches: list[str] = re.findall(r'href="(https://[^"]+?\.csv)"', html)
+    if not matches:
+        raise ValueError("No CSV asset link found on the GOV.UK fuel prices page")
+    # Prefer the weekly/2018-to-present data file if the filename hints at it.
+    preferred = [
+        m for m in matches
+        if any(k in m.lower() for k in ("fuel", "weekly", "2018", "csv_data"))
+    ]
+    return preferred[0] if preferred else matches[0]
+
+
+async def fetch_latest_csv_url(landing_page: str = LANDING_PAGE) -> str:
+    """Scrape the GOV.UK landing page for the current weekly fuel-prices CSV URL."""
+    import httpx
+
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        resp = await client.get(landing_page)
+        resp.raise_for_status()
+        return extract_csv_url(resp.text)
 
 
 async def fetch_fuel_csv(url: str) -> str:

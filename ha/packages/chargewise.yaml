@@ -1,0 +1,114 @@
+# ChargeWise — Home Assistant REST sensors
+#
+# Drop-in package that reads the ChargeWise API and exposes the lifetime
+# summary as sensors the dashboard (ha/dashboards/chargewise.yaml) consumes.
+#
+# Enable packages once in configuration.yaml:
+#     homeassistant:
+#       packages: !include_dir_named packages
+# then place this file at  <config>/packages/chargewise.yaml
+#
+# Set the URL (and, if your API has auth enabled, a bearer token) in secrets.yaml
+# — see ha/secrets.example.yaml. On a LAN-only instance running with
+# AUTH_DISABLED=true you can omit the Authorization header entirely.
+#
+# `rest:` is a YAML-only integration: it loads at startup and needs a Home
+# Assistant restart (or a YAML config reload of REST) to take effect.
+
+rest:
+  # --- Lifetime summary: one poll feeds many sensors -----------------------
+  - resource: !secret chargewise_summary_url   # e.g. http://192.168.1.50:8000/api/summary/lifetime
+    method: GET
+    scan_interval: 1800                         # summary changes slowly; poll every 30 min
+    timeout: 30
+    headers:
+      Accept: application/json
+      # Authorization: !secret chargewise_auth  # uncomment if the API has auth enabled
+    sensor:
+      - name: "ChargeWise Lifetime Cost"
+        unique_id: chargewise_lifetime_cost_gbp
+        value_template: "{{ value_json.total_cost_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:cash
+
+      - name: "ChargeWise Lifetime Saving"
+        unique_id: chargewise_lifetime_saving_gbp
+        value_template: "{{ value_json.saving_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:piggy-bank
+
+      - name: "ChargeWise Petrol Equivalent Cost"
+        unique_id: chargewise_petrol_equiv_gbp
+        value_template: "{{ value_json.petrol_equiv_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:fuel
+
+      - name: "ChargeWise Home Charging Cost"
+        unique_id: chargewise_home_cost_gbp
+        value_template: "{{ value_json.home_cost_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:home-lightning-bolt
+
+      - name: "ChargeWise Away Charging Cost"
+        unique_id: chargewise_away_cost_gbp
+        value_template: "{{ value_json.away_cost_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:ev-station
+
+      - name: "ChargeWise Total Energy"
+        unique_id: chargewise_total_energy_kwh
+        value_template: "{{ value_json.total_energy_kwh | default(0) | round(2) }}"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        icon: mdi:lightning-bolt
+
+      - name: "ChargeWise Total Miles"
+        unique_id: chargewise_total_miles
+        value_template: "{{ value_json.total_miles | default(0) | round(1) }}"
+        unit_of_measurement: "mi"
+        state_class: total
+        icon: mdi:road-variant
+
+      - name: "ChargeWise Electric Cost per Mile"
+        unique_id: chargewise_electric_pence_per_mile
+        value_template: "{{ value_json.electric_pence_per_mile | default(0) | round(2) }}"
+        unit_of_measurement: "p/mi"
+        state_class: measurement
+        icon: mdi:car-electric
+
+      - name: "ChargeWise Petrol Cost per Mile"
+        unique_id: chargewise_petrol_pence_per_mile
+        value_template: "{{ value_json.petrol_pence_per_mile | default(0) | round(2) }}"
+        unit_of_measurement: "p/mi"
+        state_class: measurement
+        icon: mdi:gas-station
+
+      - name: "ChargeWise Session Count"
+        unique_id: chargewise_session_count
+        value_template: "{{ value_json.session_count | default(0) }}"
+        state_class: total_increasing
+        icon: mdi:counter
+
+  # --- Health check: simple up/down signal for the API ---------------------
+  - resource: !secret chargewise_health_url    # e.g. http://192.168.1.50:8000/health
+    method: GET
+    scan_interval: 300
+    timeout: 10
+    headers:
+      Accept: application/json
+    binary_sensor:
+      - name: "ChargeWise API"
+        unique_id: chargewise_api_online
+        device_class: connectivity
+        value_template: "{{ value_json.status == 'ok' }}"

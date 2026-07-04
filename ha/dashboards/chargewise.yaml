@@ -1,0 +1,114 @@
+# ChargeWise — Home Assistant dashboard
+#
+# A sections-view Lovelace dashboard reading the REST sensors defined in
+# ha/packages/chargewise.yaml. Add it as a new dashboard:
+#   Settings → Dashboards → Add dashboard → (open it) → Edit → Raw configuration
+# editor → paste the `views:` block below. Or register it in YAML mode under
+#   lovelace:
+#     dashboards:
+#       chargewise:
+#         mode: yaml
+#         filename: dashboards/chargewise.yaml
+#         title: ChargeWise
+#         icon: mdi:car-electric
+#
+# Entity IDs are derived from the sensor names in the package; adjust if you
+# renamed them.
+
+title: ChargeWise
+views:
+  - title: Overview
+    path: chargewise
+    icon: mdi:car-electric
+    type: sections
+    max_columns: 3
+    badges:
+      - entity: binary_sensor.chargewise_api
+    sections:
+      - title: Lifetime savings vs petrol
+        cards:
+          - type: tile
+            entity: sensor.chargewise_lifetime_saving
+            name: Saved vs petrol
+            icon: mdi:piggy-bank
+            color: green
+            tap_action:
+              action: more-info
+          - type: tile
+            entity: sensor.chargewise_lifetime_cost
+            name: Spent on electricity
+            icon: mdi:cash
+            tap_action:
+              action: more-info
+          - type: tile
+            entity: sensor.chargewise_petrol_equivalent_cost
+            name: Petrol would have cost
+            icon: mdi:fuel
+            color: orange
+            tap_action:
+              action: more-info
+
+      - title: Cost breakdown
+        cards:
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: tile
+                entity: sensor.chargewise_home_charging_cost
+                name: Home
+                icon: mdi:home-lightning-bolt
+              - type: tile
+                entity: sensor.chargewise_away_charging_cost
+                name: Public
+                icon: mdi:ev-station
+              - type: tile
+                entity: sensor.chargewise_total_energy
+                name: Energy
+                icon: mdi:lightning-bolt
+              - type: tile
+                entity: sensor.chargewise_total_miles
+                name: Miles
+                icon: mdi:road-variant
+
+      - title: Cost per mile
+        cards:
+          - type: gauge
+            entity: sensor.chargewise_electric_cost_per_mile
+            name: Electric
+            unit: p/mi
+            min: 0
+            max: 30
+            needle: true
+            severity:
+              green: 0
+              yellow: 10
+              red: 20
+          - type: gauge
+            entity: sensor.chargewise_petrol_cost_per_mile
+            name: Petrol
+            unit: p/mi
+            min: 0
+            max: 30
+            needle: true
+            severity:
+              green: 0
+              yellow: 10
+              red: 20
+
+      - title: Status
+        cards:
+          - type: tile
+            entity: binary_sensor.chargewise_api
+            name: API
+            icon: mdi:server-network
+          - type: tile
+            entity: sensor.chargewise_session_count
+            name: Charge sessions
+            icon: mdi:counter
+          - type: history-graph
+            title: Saving trend
+            hours_to_show: 720
+            entities:
+              - entity: sensor.chargewise_lifetime_saving
+                name: Saved vs petrol

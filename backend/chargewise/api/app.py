@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 

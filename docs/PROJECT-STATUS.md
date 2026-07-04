@@ -1,6 +1,6 @@
 # ChargeWise — Project Status & Session Handoff
 
-**Updated:** 16 June 2026 · **Profile:** Personal · **Repo:** https://github.com/AlistairWDoran/chargewise (Public, MIT, default branch `master`)
+**Updated:** 23 June 2026 · **Profile:** Personal · **Repo:** https://github.com/AlistairWDoran/chargewise (Public, MIT, default branch `master`)
 **Working folder:** `C:\Users\alist\OneDrive\Repos\Home-Automation\Home Automation\ev-charging-cost-tracker`
 
 This is the single place a fresh session should read first. It summarises what ChargeWise is, what's built, the environment/tools, decisions, and the next steps.
@@ -30,26 +30,29 @@ Name **ChargeWise** · scope v1 = charging energy only (home + public), standing
 - Entra tenant `alistairdoranoutlook.onmicrosoft.com` (admin `a-doran@…`) for Microsoft sign-in.
 - GitHub account **AlistairWDoran**; `gh` authenticated on the machine.
 
-## 5. Built and verified (29 passing tests)
+## 5. Built and verified (43 passing tests, coverage 88%)
 
 - **Cost engine** (`backend/chargewise/engine/`) — pure, dispatch-aware IOG costing, away costing, petrol savings, mileage. Grounded on real rates/dispatches.
-- **Ingest adapters** (`backend/chargewise/ingest/`) — Octopus REST (tariff agreements, unit rates → RatePeriod) + GraphQL (dispatches); GOV.UK fuel-price CSV parser.
+- **Ingest adapters** (`backend/chargewise/ingest/`) — Octopus REST (tariff agreements, unit rates → RatePeriod, plus `product_code_from_tariff`) + GraphQL (dispatches); GOV.UK fuel-price CSV parser (+ `fetch_latest_csv_url`/`extract_csv_url`).
+- **Ingestion pipeline** (`backend/chargewise/ingest/pipeline.py`) — wires adapters → engine → store, idempotent, with a CLI (`python -m chargewise.ingest.pipeline`). Fetches fuel weeks, derives one rate era per Octopus tariff agreement, pulls dispatches, costs sessions and upserts them. Charge sessions load via a generic CSV source (`ingest/charge_sessions.py`) until the TeslaFi adapter lands. Per-session miles = consecutive odometer deltas.
 - **Storage** (`backend/chargewise/store/`) — SQLAlchemy models, idempotent repositories, lifetime summary with savings.
 - **API** (`backend/chargewise/api/`) — FastAPI `/health`, `/api/summary/lifetime`, `/api/charges`, `/api/settings`; OAuth-ready auth gate; config reads secrets from env (Key Vault in Azure).
+- **HA dashboard** (`ha/`) — drop-in REST-sensor package + Lovelace sections dashboard reading the API, with setup README. Not yet pushed to the live HA (needs the API running + an HA restart).
 - Repo scaffolding: README, MIT LICENSE, `.gitignore`, `.env.example`, `Makefile`, `docker-compose.yml`, GitHub Actions CI (ruff, mypy, pytest+coverage, gitleaks).
 
-Run tests: `cd backend && python -m pytest` (use a clean copy or Windows-MCP if the OneDrive mount mis-syncs).
+Run tests: `cd backend && python -m pytest` (use a clean copy or Windows-MCP if the OneDrive mount mis-syncs). A working venv is at `C:\Users\alist\.venvs\chargewise` (needs `tzdata` on Windows for `zoneinfo`). NB: editable `pip install -e .` fails because `readme` points outside `backend/`; tests run fine without an install from the `backend/` dir.
 
 ## 6. Open items / not yet done
 
-- **TeslaFi history API** — awaiting support reply (field names, multi-vehicle, pagination, rate limits, Supercharger invoice cost, beta stability). Email sent. See `TESLAFI-SUPPORT-EMAIL.md`.
-- **Ingestion pipeline** — wire adapters → engine → store (Octopus + fuel can be built now; TeslaFi after reply or via CSV fallback).
+- **TeslaFi history API** — awaiting support reply (field names, multi-vehicle, pagination, rate limits, Supercharger invoice cost, beta stability). Email sent. See `TESLAFI-SUPPORT-EMAIL.md`. The pipeline already has a TeslaFi-shaped CSV fallback so real data can flow before the API arrives.
 - **Golden reconciliation test** — needs the Octopus API key (into Key Vault / local `.env`).
-- **HA dashboard** — YAML package + Lovelace reading the API (use home-assistant-best-practices skill + HA MCP).
+- **Run the pipeline with the real Octopus key** — drop `OCTOPUS_API_KEY` into `backend/.env`, then `python -m chargewise.ingest.pipeline --fuel-only` (no key) or with `--charges-csv`.
+- **Push HA dashboard to live HA** — once the API is reachable on the LAN; set the URLs in HA `secrets.yaml`, copy the package, restart HA.
 - **Next.js frontend** — Overview/History/Savings/Settings; warm, themeable, light/dark (theme-factory/canvas-design).
 - **Auth** — create Entra app registration (client ID + secret); need Azure tenant ID (GUID).
 - **Azure deploy** — `azd` + Bicep for Container Apps + Key Vault + Azure Files (SQLite volume).
+- **Pre-existing mypy debt** — `mypy chargewise` (strict) reports ~24 errors in older files (`api/app.py`, `store/repositories.py`, the original Octopus client methods) — mostly untyped `dict` and `str | None` handling. New pipeline code is clean; ruff is fully green. Worth a focused cleanup so CI passes.
 
 ## 7. Suggested next step
 
-Build the **Home Assistant dashboard** (reads the API; quick visible win) or the **Octopus + fuel ingestion pipeline** (gets real data flowing). Frontend after.
+Run the pipeline against the real Octopus key to get data flowing, then either build the **Next.js frontend** or deploy to **Azure**. The HA dashboard is ready to go live as soon as the API is reachable.

@@ -40,6 +40,25 @@ class RateRecord:
     value_exc_vat: float
 
 
+def product_code_from_tariff(tariff_code: str) -> str:
+    """Derive the Octopus product code from a tariff code.
+
+    Tariff codes look like ``E-1R-INTELLI-VAR-24-10-29-H`` = energy type (``E``),
+    register (``1R``), product (``INTELLI-VAR-24-10-29``) and region letter (``H``).
+    The standard-unit-rates endpoint is keyed by the product code, so strip the
+    leading energy/register pair and the trailing single-letter region.
+    """
+    parts = tariff_code.split("-")
+    if len(parts) < 4 or len(parts[-1]) != 1 or not parts[-1].isalpha():
+        raise ValueError(f"Unexpected tariff code: {tariff_code!r}")
+    return "-".join(parts[2:-1])
+
+
+def region_from_tariff(tariff_code: str) -> str:
+    """Return the GSP region letter (e.g. ``H``) from a tariff code."""
+    return tariff_code.split("-")[-1]
+
+
 def parse_account(payload: dict) -> dict:
     """Extract the first electricity meter point's mpan, serial and agreements."""
     prop = payload["properties"][0]
