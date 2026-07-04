@@ -98,8 +98,9 @@ def derive_iog_rate_periods(records: list[RateRecord]) -> list[RatePeriod]:
     """
     if not records:
         return []
-    offpeak = min(r.value_inc_vat for r in records)
-    peak = max(r.value_inc_vat for r in records)
+    # Octopus unit rates arrive in PENCE per kWh; the engine works in GBP.
+    offpeak = min(r.value_inc_vat for r in records) / 100.0
+    peak = max(r.value_inc_vat for r in records) / 100.0
     valid_from = min(r.valid_from for r in records)
     valid_to = None if any(r.valid_to is None for r in records) else max(
         r.valid_to for r in records  # type: ignore[type-var]

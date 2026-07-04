@@ -37,6 +37,13 @@ def upsert_charge_session(db: Session, **fields) -> ChargeSession:
         )
     )
     if existing is not None:
+        # Refresh derived fields so a re-run re-costs sessions (e.g. after a
+        # rate fix or new dispatch data) without duplicating rows.
+        for key in ("end_utc", "location_type", "cost_gbp", "cost_is_estimate",
+                    "odometer", "miles", "source"):
+            if key in fields:
+                setattr(existing, key, fields[key])
+        db.commit()
         return existing
     row = ChargeSession(**fields)
     db.add(row)

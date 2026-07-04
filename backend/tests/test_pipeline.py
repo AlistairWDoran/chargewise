@@ -215,8 +215,8 @@ def test_fetch_octopus_inputs_builds_periods_and_dispatches():
         pipeline.fetch_octopus_inputs(_FakeRest(), _FakeGql(), "A-A8D3E32A")
     )
     assert len(periods) == 1
-    assert periods[0].offpeak_inc_vat == pytest.approx(6.9)
-    assert periods[0].peak_inc_vat == pytest.approx(30.3714)
+    assert periods[0].offpeak_inc_vat == pytest.approx(0.069)
+    assert periods[0].peak_inc_vat == pytest.approx(0.303714)
     assert len(dispatches) == 1
 
 

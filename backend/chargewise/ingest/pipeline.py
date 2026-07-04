@@ -21,13 +21,15 @@ CLI
     python -m chargewise.ingest.pipeline --fuel-only
     python -m chargewise.ingest.pipeline --charges-csv data/charges.csv --vehicle "Friday"
     python -m chargewise.ingest.pipeline --charges-csv data/charges.csv --no-octopus
+    python -m chargewise.ingest.pipeline --teslafi                       # full backfill
+    python -m chargewise.ingest.pipeline --teslafi --from 2026-06-01     # recent window
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -45,6 +47,10 @@ from .fuel_prices import (
 )
 from .octopus_graphql import OctopusGraphQLClient
 from .octopus_rest import OctopusRestClient, derive_iog_rate_periods, product_code_from_tariff
+from .teslafi_history import TeslaFiCharge, TeslaFiHistoryClient
+
+#: Earliest data in the TeslaFi account (Tesla #1 acquired Feb 2022).
+TESLAFI_EPOCH = date(2022, 2, 1)
 
 
 # --------------------------------------------------------------------------- #
@@ -113,6 +119,22 @@ def cost_and_store_sessions(
     return {"processed": len(ordered), "inserted": after - before}
 
 
+def vehicle_name_for(vin: str, model: str, mapping: dict[str, str] | None = None) -> str:
+    """Human-friendly vehicle name for a VIN, honouring an explicit mapping."""
+    if mapping and vin in mapping:
+        return mapping[vin]
+    label = model.strip().title() if model.strip() else "Tesla"
+    return f"{label} ({vin[-6:]})" if vin else label
+
+
+def group_by_vin(charges: list[TeslaFiCharge]) -> dict[tuple[str, str], list[ChargeSession]]:
+    """Group parsed TeslaFi charges into per-vehicle session lists."""
+    grouped: dict[tuple[str, str], list[ChargeSession]] = {}
+    for charge in charges:
+        grouped.setdefault((charge.vin, charge.model), []).append(charge.session)
+    return grouped
+
+
 # --------------------------------------------------------------------------- #
 # Network fetchers.
 # --------------------------------------------------------------------------- #
@@ -126,6 +148,10 @@ async def fetch_octopus_inputs(
     account = await rest_client.get_account(account_number)
     periods: list[RatePeriod] = []
     for agreement in account["agreements"]:
+        # Tariff switches can leave zero-length agreements (valid_from ==
+        # valid_to); Octopus returns 400 for an empty rates window, so skip.
+        if agreement.valid_to is not None and agreement.valid_to <= agreement.valid_from:
+            continue
         product = product_code_from_tariff(agreement.tariff_code)
         period_from = agreement.valid_from.isoformat()
         period_to = (agreement.valid_to or datetime.now(timezone.utc)).isoformat()
@@ -160,6 +186,10 @@ async def run_pipeline(
     *,
     charges_csv: str | None = None,
     vehicle_name: str = "Tesla",
+    teslafi: bool = False,
+    teslafi_from: date | None = None,
+    teslafi_to: date | None = None,
+    vehicle_map: dict[str, str] | None = None,
     fuel_only: bool = False,
     use_octopus: bool = True,
     fuel_url: str | None = None,
@@ -206,6 +236,29 @@ async def run_pipeline(
                 dispatches,
                 settings.away_rate_gbp_per_kwh,
             )
+
+        if teslafi:
+            if not settings.teslafi_token:
+                raise RuntimeError(
+                    "TeslaFi ingestion needs TESLAFI_TOKEN in the environment / .env."
+                )
+            client = TeslaFiHistoryClient(settings.teslafi_token)
+            charges = await client.backfill(
+                teslafi_from or TESLAFI_EPOCH,
+                teslafi_to or datetime.now(timezone.utc).date(),
+            )
+            for (vin, model), sessions in group_by_vin(charges).items():
+                name = vehicle_name_for(vin, model, vehicle_map)
+                vehicle = repo.get_or_create_vehicle(db, name, vin=vin)
+                summary[f"teslafi:{name}"] = cost_and_store_sessions(
+                    db,
+                    vehicle.id,
+                    sessions,
+                    rate_periods,
+                    dispatches,
+                    settings.away_rate_gbp_per_kwh,
+                    source="teslafi_history",
+                )
         return summary
     finally:
         db.close()
@@ -223,15 +276,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Skip Octopus rate/dispatch fetch (away-only costing).")
     p.add_argument("--fuel-url", default=None,
                    help="Override the fuel-prices CSV URL (else auto-resolved).")
+    p.add_argument("--teslafi", action="store_true",
+                   help="Ingest charge history from the TeslaFi API.")
+    p.add_argument("--from", dest="teslafi_from", default=None, metavar="YYYY-MM-DD",
+                   help="TeslaFi backfill start (default: Feb 2022).")
+    p.add_argument("--to", dest="teslafi_to", default=None, metavar="YYYY-MM-DD",
+                   help="TeslaFi backfill end (default: today).")
+    p.add_argument("--vehicle-map", action="append", default=[], metavar="VIN=Name",
+                   help="Name a vehicle by VIN, e.g. --vehicle-map XP7...=Friday. Repeatable.")
     return p.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+    vehicle_map = dict(m.split("=", 1) for m in args.vehicle_map)
     summary = asyncio.run(
         run_pipeline(
             charges_csv=args.charges_csv,
             vehicle_name=args.vehicle,
+            teslafi=args.teslafi,
+            teslafi_from=date.fromisoformat(args.teslafi_from) if args.teslafi_from else None,
+            teslafi_to=date.fromisoformat(args.teslafi_to) if args.teslafi_to else None,
+            vehicle_map=vehicle_map or None,
             fuel_only=args.fuel_only,
             use_octopus=not args.no_octopus,
             fuel_url=args.fuel_url,

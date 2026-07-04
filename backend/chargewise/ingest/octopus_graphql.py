@@ -16,7 +16,7 @@ from datetime import datetime
 
 from ..engine.models import Dispatch
 
-GRAPHQL_URL = "https://api.octopus.energy/v1/graphql"
+GRAPHQL_URL = "https://api.octopus.energy/v1/graphql/"
 
 COMPLETED_DISPATCHES_QUERY = """
 query Dispatches($accountNumber: String!) {

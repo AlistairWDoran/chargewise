@@ -55,11 +55,17 @@ def test_parse_account_extracts_meter_and_agreement():
 
 
 def test_derive_rate_periods_picks_offpeak_and_peak():
+    """Octopus supplies rates in pence; RatePeriods must be in GBP/kWh.
+
+    Regression: rates were passed through in pence, inflating every cost
+    by exactly 100x (found when the first real backfill priced lifetime
+    home charging at £784k).
+    """
     records = parse_unit_rates(UNIT_RATES)
     periods = derive_iog_rate_periods(records)
     assert len(periods) == 1
-    assert periods[0].offpeak_inc_vat == pytest.approx(6.9)
-    assert periods[0].peak_inc_vat == pytest.approx(30.3714)
+    assert periods[0].offpeak_inc_vat == pytest.approx(0.069)
+    assert periods[0].peak_inc_vat == pytest.approx(0.303714)
     assert periods[0].valid_to is None  # peak rate still active
 
 
@@ -73,4 +79,4 @@ def test_dispatches_feed_into_engine_as_offpeak():
     )
     result = cost_home_session(session, periods, dispatches)
     assert result.slots[0].rate_source is RateSource.DISPATCH
-    assert result.total_cost == pytest.approx(5.0 * 6.9)
+    assert result.total_cost == pytest.approx(5.0 * 0.069)
