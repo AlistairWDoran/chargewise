@@ -1,58 +1,53 @@
 # ChargeWise — Project Status & Session Handoff
 
-**Updated:** 23 June 2026 · **Profile:** Personal · **Repo:** https://github.com/AlistairWDoran/chargewise (Public, MIT, default branch `master`)
+**Updated:** 11 July 2026 · **Profile:** Personal · **Repo:** https://github.com/AlistairWDoran/chargewise (Public, MIT, default branch `master`)
 **Working folder:** `C:\Users\alist\OneDrive\Repos\Home-Automation\Home Automation\ev-charging-cost-tracker`
 
-This is the single place a fresh session should read first. It summarises what ChargeWise is, what's built, the environment/tools, decisions, and the next steps.
+This is the single place a fresh session should read first.
 
 ## 1. What ChargeWise is
 
-Open-source tool showing the true cost of running a Tesla on electricity and the savings vs petrol — ongoing and lifetime since Feb 2022. Combines TeslaFi (energy, location, mileage), Octopus Intelligent Octopus Go (real rates + smart-dispatch slots, for accurate home-charge costing), and GOV.UK weekly fuel prices (petrol comparison). Two front-ends from one core: a Home Assistant dashboard and a standalone web app. See `PRD.md`, `DELIVERY-PLAN.md`, `METHODOLOGY.md`.
+Open-source tool showing the true cost of running a Tesla on electricity and the savings vs petrol — ongoing and lifetime since Feb 2022. Combines TeslaFi (energy, location, mileage), Octopus Intelligent Octopus Go (real rates + smart-dispatch slots), and GOV.UK weekly fuel prices. See `PRD.md`, `DELIVERY-PLAN.md`, `METHODOLOGY.md`.
 
-## 2. Environment & tools (verified this session)
+## 2. IT'S LIVE (11 Jul 2026)
 
-- **Windows-MCP** — runs PowerShell + file ops on Alistair's real Windows machine. Use it to run `gh`, `git`, `az`, `azd`, `pytest` against the actual repo/machine. This is the Desktop-Commander-equivalent in Cowork (Desktop Commander itself is not connected by name).
-- **Home Assistant MCP** — HA at `http://192.168.1.225:8123`; Octopus (BottlecapDave) + Tesla Custom integrations live.
-- **Context7** — up-to-date library docs (FastAPI, Next.js, SQLAlchemy, Auth.js).
-- **Microsoft Learn MCP** — Azure Container Apps / Key Vault deployment guidance.
-- **Mermaid + GitHub helper MCP** — can push files/PRs to an existing repo (needs a `Github-Token`); cannot create repos. Prefer Windows-MCP `gh`/`git` for repo work.
-- Sandbox Linux shell (`bash`) is separate from the user's machine; the OneDrive mount can serve **stale/truncated file copies mid-sync** — verify tests on the real machine via Windows-MCP, or from a clean copy.
+**Production:** Docker on the Synology NAS (24/7) — `chargewise-api` (port 8000) + `chargewise-scheduler` (daily incremental pipeline, 35-day rolling re-cost). Deployed via `docker-compose.nas.yml` at `/volume1/docker/chargewise/`.
+**Consumer:** Home Assistant dashboard "ChargeWise" (`/chargewise-ev/chargewise`) — 11 REST sensors via `packages/chargewise.yaml`, secrets point at `http://192.168.1.18:8000`.
 
-## 3. Confirmed decisions
+**Lifetime figures (Feb 2022 → Jul 2026):** 4,377 sessions · 26,409 kWh · 75,512 miles · electricity £8,963 (home £7,832 / public £1,131) · petrol equivalent £17,012 · **saving £8,049** · 11.87 vs 22.53 p/mile.
 
-Name **ChargeWise** · scope v1 = charging energy only (home + public), standing charge excluded · home cost via real Octopus IOG rates, dispatch-aware · combined totals across vehicles · stack **FastAPI + React/Next.js**, **SQLite** (abstracted for Postgres) · **internet-reachable with OAuth login (Microsoft/Google)** · HA reads the ChargeWise API · hosting **Azure Container Apps + Key Vault** · **MIT**, public GitHub.
+## 3. Environment & access
 
-## 4. Key identifiers
+- **Windows-MCP** — PowerShell/files on Alistair's laptop (OpenSSH client + ssh-keygen do NOT work under it — use paramiko via `C:\Users\alist\.venvs\chargewise\Scripts\python.exe`).
+- **Synology NAS** — 192.168.1.18, SSH port **49153**, user `admin`, key `C:\Users\alist\.ssh\id_ed25519`. **No passwordless sudo (Alistair's explicit choice)** — stage files as admin (see `scripts/deploy-nas.py`, streams over exec channels; SFTP disabled on DSM), then hand Alistair one `sudo env PATH=/usr/local/bin:/usr/bin:/bin /usr/local/bin/docker-compose ...` command to run himself. Docker 20.10.3 + compose 1.28.5 live in `/usr/local/bin` (sudo strips it from PATH).
+- **Home Assistant** — Pi 4 at 192.168.1.225:8123 (HA 2026.7.1). Config edits via the **File Editor add-on driven through Claude-in-Chrome** (ACE editor exposed at the iframe's `window.editor`; `loadfile`/`save_check`/`newfolder`/`newfile`). HA MCP in Cowork exposes only update/radio tools. Dashboards can be created over websocket (`lovelace/dashboards/create` — url_path needs a hyphen; modern sections format: `type: grid` + `heading` cards).
+- **TeslaFi** — history API works: `history.php?token=…&command=charges&dateFrom&dateTo`. `date` is UTC; `chargerKWH` = wall energy; `vin` splits vehicles; rate-limits after ~30 rapid calls (adapter backs off). Token in `backend/.env` (`TESLAFI_TOKEN`).
+- **Octopus** — key + account in `backend/.env` (`OCTOPUS_API_KEY`, `OCTOPUS_ACCOUNT_NUMBER`).
 
-- Octopus account **A-A8D3E32A**; tariff `E-1R-INTELLI-VAR-24-10-29-H` (region H); off-peak £0.069, peak £0.303714 inc VAT (as of 15 Jun 2026). v1 uses the API-key path (not OAuth — see `OCTOPUS-OAUTH-SETUP.md`).
-- Vehicles: Tesla #1 **Feb 2022 → early Aug 2024**; Tesla #2 **early Aug 2024 → present**. Combined totals.
-- Azure subscription **Development-01** = `ca9e52f7-aedc-4f14-b84d-21a9e978cff7`; region UK South (tbc).
-- Entra tenant `alistairdoranoutlook.onmicrosoft.com` (admin `a-doran@…`) for Microsoft sign-in.
-- GitHub account **AlistairWDoran**; `gh` authenticated on the machine.
+## 4. Hard-won lessons (do not relearn)
 
-## 5. Built and verified (43 passing tests, coverage 88%)
+- **Rates arrive in PENCE** — `derive_iog_rate_periods` divides by 100; regression-tested. The first backfill priced lifetime charging at £784k because tests had encoded the pence assumption. Golden reconciliation against a real bill is still the missing trust anchor.
+- Upsert **re-costs** existing sessions on re-run (idempotent by vehicle+start+energy, refreshes cost fields).
+- Octopus GraphQL URL needs a trailing slash (301 on POST otherwise); zero-length tariff agreements must be skipped (400).
+- Synology home-dir ACLs break SSH key auth ("bad ACL permission") — fix parent `homes` via File Station permission rewrite, then `synoacltool -del` + `chmod 755` on the home.
+- Windows tar's pax headers break the NAS's GNU tar — build bundles with Python `tarfile` (GNU_FORMAT).
 
-- **Cost engine** (`backend/chargewise/engine/`) — pure, dispatch-aware IOG costing, away costing, petrol savings, mileage. Grounded on real rates/dispatches.
-- **Ingest adapters** (`backend/chargewise/ingest/`) — Octopus REST (tariff agreements, unit rates → RatePeriod, plus `product_code_from_tariff`) + GraphQL (dispatches); GOV.UK fuel-price CSV parser (+ `fetch_latest_csv_url`/`extract_csv_url`).
-- **Ingestion pipeline** (`backend/chargewise/ingest/pipeline.py`) — wires adapters → engine → store, idempotent, with a CLI (`python -m chargewise.ingest.pipeline`). Fetches fuel weeks, derives one rate era per Octopus tariff agreement, pulls dispatches, costs sessions and upserts them. Charge sessions load via a generic CSV source (`ingest/charge_sessions.py`) until the TeslaFi adapter lands. Per-session miles = consecutive odometer deltas.
-- **Storage** (`backend/chargewise/store/`) — SQLAlchemy models, idempotent repositories, lifetime summary with savings.
-- **API** (`backend/chargewise/api/`) — FastAPI `/health`, `/api/summary/lifetime`, `/api/charges`, `/api/settings`; OAuth-ready auth gate; config reads secrets from env (Key Vault in Azure).
-- **HA dashboard** (`ha/`) — drop-in REST-sensor package + Lovelace sections dashboard reading the API, with setup README. Not yet pushed to the live HA (needs the API running + an HA restart).
-- Repo scaffolding: README, MIT LICENSE, `.gitignore`, `.env.example`, `Makefile`, `docker-compose.yml`, GitHub Actions CI (ruff, mypy, pytest+coverage, gitleaks).
+## 5. Accuracy caveats (honest state)
 
-Run tests: `cd backend && python -m pytest` (use a clean copy or Windows-MCP if the OneDrive mount mis-syncs). A working venv is at `C:\Users\alist\.venvs\chargewise` (needs `tzdata` on Windows for `zoneinfo`). NB: editable `pip install -e .` fails because `readme` points outside `backend/`; tests run fine without an install from the `backend/` dir.
+- Home costs likely **overstated** (conservative): Octopus dispatch feed is recent-window only (10 dispatches), so historical daytime smart-charges billed at peak; `derive_iog_rate_periods` collapses each tariff agreement to one min/max era (2022–24 VAR era approximate).
+- **TeslaFi data gap Jan–mid-May 2026** — subscription lapse (confirmed by Alistair); unrecoverable from TeslaFi.
+- Golden reconciliation test vs a real Octopus bill: **still to do** — next accuracy milestone.
 
-## 6. Open items / not yet done
+## 6. Open items
 
-- **TeslaFi history API** — awaiting support reply (field names, multi-vehicle, pagination, rate limits, Supercharger invoice cost, beta stability). Email sent. See `TESLAFI-SUPPORT-EMAIL.md`. The pipeline already has a TeslaFi-shaped CSV fallback so real data can flow before the API arrives.
-- **Golden reconciliation test** — needs the Octopus API key (into Key Vault / local `.env`).
-- **Run the pipeline with the real Octopus key** — drop `OCTOPUS_API_KEY` into `backend/.env`, then `python -m chargewise.ingest.pipeline --fuel-only` (no key) or with `--charges-csv`.
-- **Push HA dashboard to live HA** — once the API is reachable on the LAN; set the URLs in HA `secrets.yaml`, copy the package, restart HA.
-- **Next.js frontend** — Overview/History/Savings/Settings; warm, themeable, light/dark (theme-factory/canvas-design).
-- **Auth** — create Entra app registration (client ID + secret); need Azure tenant ID (GUID).
-- **Azure deploy** — `azd` + Bicep for Container Apps + Key Vault + Azure Files (SQLite volume).
-- **Pre-existing mypy debt** — `mypy chargewise` (strict) reports ~24 errors in older files (`api/app.py`, `store/repositories.py`, the original Octopus client methods) — mostly untyped `dict` and `str | None` handling. New pipeline code is clean; ruff is fully green. Worth a focused cleanup so CI passes.
+1. **Golden reconciliation test** (accuracy gate from the delivery plan).
+2. Multi-era rate refinement (per-era rates rather than min/max collapse).
+3. mypy debt in older files (~24 errors); new code is clean.
+4. Next.js frontend + Azure deploy — **deliberately parked**; LAN v1 shipped. Revisit only if still wanted.
+5. Vehicles named "Tesla 1" (LRW…3329) and "Friday" (XP7…9220) via `--vehicle-map`.
 
-## 7. Suggested next step
+## 7. Daily operation
 
-Run the pipeline against the real Octopus key to get data flowing, then either build the **Next.js frontend** or deploy to **Azure**. The HA dashboard is ready to go live as soon as the API is reachable.
+The NAS scheduler re-runs the pipeline daily (35-day window, fuel refresh included). Manual run on the NAS:
+`ssh -t -p 49153 admin@192.168.1.18` then `cd /volume1/docker/chargewise && sudo env PATH=/usr/local/bin:/usr/bin:/bin /usr/local/bin/docker-compose -f docker-compose.nas.yml run --rm scheduler python -m chargewise.ingest.pipeline --teslafi --from <date> --vehicle-map "LRWYHCEK6NC223329=Tesla 1" --vehicle-map "XP7YHCEK0RB479220=Friday"`.
+Redeploy after code changes: rebuild bundle (`tarfile`, see `scripts/deploy-nas.py`), run the script, then Alistair runs the compose up command above with `up -d --build`.

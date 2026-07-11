@@ -1,0 +1,51 @@
+# ChargeWise on the Synology NAS — 24/7 API + daily ingestion.
+#
+# Deploy as a Container Manager "Project" pointed at this file, with the
+# repo's backend/ folder, a .env and (optionally) an existing data/ SQLite
+# DB alongside it. See docs/DEPLOY-SYNOLOGY.md.
+#
+# Services share one image:
+#   api        — serves the dashboard/HA on port 8000, restarts on boot
+#   scheduler  — daily incremental pipeline run (last 35 days of TeslaFi,
+#                fresh Octopus rates/dispatches, weekly GOV.UK fuel prices)
+
+# version key kept for the NAS's docker-compose 1.28 (harmless elsewhere)
+version: "3.3"
+
+services:
+  api:
+    build: ./backend
+    image: chargewise-backend
+    container_name: chargewise-api
+    env_file: .env
+    environment:
+      - TZ=Europe/London
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  scheduler:
+    image: chargewise-backend
+    container_name: chargewise-scheduler
+    env_file: .env
+    environment:
+      - TZ=Europe/London
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - api
+    restart: unless-stopped
+    # Daily at ~04:45 local: re-cost a rolling 35-day window (idempotent
+    # upsert re-costs existing sessions, so new dispatches/rates correct
+    # recent data), plus fuel-price refresh. Gentle on TeslaFi (2 calls/day).
+    command: >
+      sh -c 'while true; do
+        python -m chargewise.ingest.pipeline --teslafi
+          --from $$(date -d "35 days ago" +%F)
+          --vehicle-map "LRWYHCEK6NC223329=Tesla 1"
+          --vehicle-map "XP7YHCEK0RB479220=Friday"
+          || echo "pipeline run failed — will retry tomorrow";
+        sleep 86400;
+      done'
