@@ -17,9 +17,10 @@ RUN pip install --no-cache-dir \
     "fastapi>=0.110" "uvicorn[standard]>=0.29" "httpx>=0.27" \
     "pydantic>=2.6" "pydantic-settings>=2.2" "sqlalchemy>=2.0"
 
-# Then the application code.
+# Then the application code and the scheduler loop.
 COPY chargewise ./chargewise
-RUN pip install --no-cache-dir --no-deps .
+COPY scheduler.sh ./scheduler.sh
+RUN pip install --no-cache-dir --no-deps . && chmod +x /app/scheduler.sh
 
 # SQLite lives on a mounted volume at /app/data (see compose files).
 RUN mkdir -p /app/data

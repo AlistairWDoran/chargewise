@@ -165,9 +165,23 @@ class TeslaFiHistoryClient:
                     await asyncio.sleep(65 * (attempt + 1))
                     continue
                 resp.raise_for_status()
-                return parse_teslafi_charges(resp.json())
+                payload = resp.json()
+                # Checksum: TeslaFi's `count` should match the results list.
+                # Partial/truncated responses were observed on 11 Jul 2026
+                # (first block of a window only) — retry rather than accept.
+                declared = payload.get("count")
+                actual = len(payload.get("results", []))
+                if isinstance(declared, int) and declared != actual:
+                    print(
+                        f"  teslafi {date_from}..{date_to}: partial response "
+                        f"({actual}/{declared}) — retrying", flush=True,
+                    )
+                    await asyncio.sleep(10 * (attempt + 1))
+                    continue
+                return parse_teslafi_charges(payload)
         raise RuntimeError(
-            f"TeslaFi still rate-limiting after retries ({date_from}..{date_to})"
+            f"TeslaFi still rate-limiting or truncating after retries "
+            f"({date_from}..{date_to})"
         )
 
     async def backfill(self, start: date, end: date) -> list[TeslaFiCharge]:
