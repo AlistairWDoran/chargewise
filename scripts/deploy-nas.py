@@ -4,7 +4,11 @@ DSM's SFTP subsystem is off by default, so files are streamed through exec
 channels instead (tar/cat over stdin). Unprivileged staging only — the final
 `docker-compose up` needs sudo and is run by Alistair interactively.
 
-Usage:  python scripts/deploy-nas.py            # stage files to the NAS
+Usage:  python scripts/deploy-nas.py            # stage code only (default)
+        python scripts/deploy-nas.py --with-db  # ALSO overwrite NAS DB + .env
+                                                # (first deploy / deliberate reset
+                                                # only — the NAS DB is the live
+                                                # one once the scheduler runs)
 """
 
 from __future__ import annotations
@@ -45,10 +49,12 @@ def main() -> None:
 
     bundle = os.path.join(os.environ["TEMP"], "chargewise-nas.tgz")
     stream(client, bundle, f"cd {DEST} && tar -xzf -")
-    stream(client, os.path.join(REPO, "backend", ".env"),
-           f"cat > {DEST}/.env && chmod 600 {DEST}/.env")
-    stream(client, os.path.join(REPO, "backend", "data", "chargewise.sqlite"),
-           f"cat > {DEST}/data/chargewise.sqlite")
+    if "--with-db" in sys.argv:
+        print("  (--with-db: overwriting NAS database and .env)")
+        stream(client, os.path.join(REPO, "backend", ".env"),
+               f"cat > {DEST}/.env && chmod 600 {DEST}/.env")
+        stream(client, os.path.join(REPO, "backend", "data", "chargewise.sqlite"),
+               f"cat > {DEST}/data/chargewise.sqlite")
 
     _, out, _ = client.exec_command(
         f"ls -la {DEST}; echo ---; ls {DEST}/backend | head -6; "
