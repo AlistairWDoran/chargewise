@@ -56,6 +56,11 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     def lifetime(db: Session = Depends(get_db), _: str = Depends(require_user)):
         return repo.lifetime_summary(db, settings.petrol_mpg, settings.fuel_type)
 
+    @app.get("/api/status")
+    def status(db: Session = Depends(get_db), _: str = Depends(require_user)) -> dict:
+        """Per-source last-sync timestamps and data freshness (for dashboards)."""
+        return repo.sync_status(db)
+
     @app.get("/api/charges", response_model=list[ChargeOut])
     def charges(
         location: str | None = None,

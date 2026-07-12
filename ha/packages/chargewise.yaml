@@ -112,3 +112,48 @@ rest:
         unique_id: chargewise_api_online
         device_class: connectivity
         value_template: "{{ value_json.status == 'ok' }}"
+
+  # --- Per-source sync status: when each feed last succeeded ---------------
+  # Sync success is distinct from data freshness: TeslaFi can sync cleanly
+  # while its own logging is stalled (seen Jan–May and Jul 2026), which is
+  # exactly what "Latest charge" going stale reveals.
+  - resource: !secret chargewise_status_url    # e.g. http://192.168.1.50:8000/api/status
+    method: GET
+    scan_interval: 900
+    timeout: 30
+    headers:
+      Accept: application/json
+    sensor:
+      - name: "ChargeWise TeslaFi Last Sync"
+        unique_id: chargewise_sync_teslafi
+        device_class: timestamp
+        value_template: "{{ value_json.teslafi.last_success_utc }}"
+        availability: "{{ value_json.teslafi.last_success_utc is not none }}"
+        icon: mdi:car-connected
+
+      - name: "ChargeWise Octopus Last Sync"
+        unique_id: chargewise_sync_octopus
+        device_class: timestamp
+        value_template: "{{ value_json.octopus.last_success_utc }}"
+        availability: "{{ value_json.octopus.last_success_utc is not none }}"
+        icon: mdi:lightning-bolt-circle
+
+      - name: "ChargeWise Fuel Prices Last Sync"
+        unique_id: chargewise_sync_fuel
+        device_class: timestamp
+        value_template: "{{ value_json.fuel.last_success_utc }}"
+        availability: "{{ value_json.fuel.last_success_utc is not none }}"
+        icon: mdi:gas-station
+
+      - name: "ChargeWise Latest Charge"
+        unique_id: chargewise_latest_charge
+        device_class: timestamp
+        value_template: "{{ value_json.teslafi.latest_charge_utc }}"
+        availability: "{{ value_json.teslafi.latest_charge_utc is not none }}"
+        icon: mdi:battery-charging
+
+      - name: "ChargeWise Fuel Prices Week"
+        unique_id: chargewise_fuel_week
+        value_template: "{{ value_json.fuel.latest_week }}"
+        availability: "{{ value_json.fuel.latest_week is not none }}"
+        icon: mdi:calendar-week

@@ -203,6 +203,7 @@ async def run_pipeline(
     summary: dict[str, object] = {}
     try:
         summary["fuel_weeks_inserted"] = await ingest_fuel(db, fuel_url)
+        repo.record_sync(db, "fuel")
 
         if fuel_only:
             return summary
@@ -221,6 +222,7 @@ async def run_pipeline(
             rate_periods, dispatches = await fetch_octopus_inputs(
                 rest, gql, settings.octopus_account_number
             )
+            repo.record_sync(db, "octopus")
             summary["rate_periods"] = len(rate_periods)
             summary["dispatches"] = len(dispatches)
 
@@ -259,6 +261,7 @@ async def run_pipeline(
                     settings.away_rate_gbp_per_kwh,
                     source="teslafi_history",
                 )
+            repo.record_sync(db, "teslafi")
         return summary
     finally:
         db.close()

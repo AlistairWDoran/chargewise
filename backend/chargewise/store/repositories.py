@@ -6,9 +6,9 @@ Includes idempotent upserts and the summary aggregation that powers the API
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..engine.savings import pence_per_mile, petrol_cost_gbp
@@ -93,6 +93,36 @@ def set_setting(db: Session, key: str, value: str) -> None:
     else:
         db.add(Setting(key=key, value=value))
     db.commit()
+
+
+def record_sync(db: Session, source: str, when: str | None = None) -> None:
+    """Record the last successful ingest for a data source (teslafi/octopus/fuel).
+
+    A "sync" means the source was fetched and stored without error — distinct
+    from data freshness (TeslaFi can sync fine while its own feed is stalled,
+    as during the 2026 subscription gaps; sync_status exposes both signals).
+    """
+    stamp = when or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    set_setting(db, f"sync:{source}", stamp)
+
+
+def sync_status(db: Session) -> dict:
+    """Per-source last-successful-sync plus data-freshness markers."""
+    latest_charge = db.scalar(select(func.max(ChargeSession.start_utc)))
+    latest_fuel_week = db.scalar(select(func.max(FuelPriceWeek.week_start)))
+    return {
+        "teslafi": {
+            "last_success_utc": get_setting(db, "sync:teslafi"),
+            "latest_charge_utc": latest_charge,
+        },
+        "octopus": {
+            "last_success_utc": get_setting(db, "sync:octopus"),
+        },
+        "fuel": {
+            "last_success_utc": get_setting(db, "sync:fuel"),
+            "latest_week": latest_fuel_week,
+        },
+    }
 
 
 def lifetime_summary(db: Session, mpg: float, fuel_type: str = "petrol") -> dict:
