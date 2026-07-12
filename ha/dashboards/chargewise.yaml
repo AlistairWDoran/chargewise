@@ -1,19 +1,14 @@
 # ChargeWise — Home Assistant dashboard
 #
-# A sections-view Lovelace dashboard reading the REST sensors defined in
-# ha/packages/chargewise.yaml. Add it as a new dashboard:
-#   Settings → Dashboards → Add dashboard → (open it) → Edit → Raw configuration
-# editor → paste the `views:` block below. Or register it in YAML mode under
-#   lovelace:
-#     dashboards:
-#       chargewise:
-#         mode: yaml
-#         filename: dashboards/chargewise.yaml
-#         title: ChargeWise
-#         icon: mdi:car-electric
+# Matches the live dashboard (url_path: chargewise-ev) as deployed 12 Jul 2026.
+# Modern sections format: HA requires `type: grid` sections with `heading`
+# cards (the older per-section `title:` key renders as an empty view), and a
+# dashboard url_path must contain a hyphen.
 #
-# Entity IDs are derived from the sensor names in the package; adjust if you
-# renamed them.
+# Add it as a new dashboard: Settings → Dashboards → Add dashboard → open it →
+# Edit → Raw configuration editor → paste the `views:` block below.
+#
+# Entity IDs are derived from the sensor names in packages/chargewise.yaml.
 
 title: ChargeWise
 views:
@@ -25,54 +20,58 @@ views:
     badges:
       - entity: binary_sensor.chargewise_api
     sections:
-      - title: Lifetime savings vs petrol
+      - type: grid
         cards:
+          - type: heading
+            heading: Lifetime savings vs petrol
           - type: tile
             entity: sensor.chargewise_lifetime_saving
             name: Saved vs petrol
             icon: mdi:piggy-bank
             color: green
-            tap_action:
-              action: more-info
           - type: tile
             entity: sensor.chargewise_lifetime_cost
             name: Spent on electricity
             icon: mdi:cash
-            tap_action:
-              action: more-info
           - type: tile
             entity: sensor.chargewise_petrol_equivalent_cost
             name: Petrol would have cost
             icon: mdi:fuel
             color: orange
-            tap_action:
-              action: more-info
 
-      - title: Cost breakdown
+      - type: grid
         cards:
-          - type: grid
-            columns: 2
-            square: false
-            cards:
-              - type: tile
-                entity: sensor.chargewise_home_charging_cost
-                name: Home
-                icon: mdi:home-lightning-bolt
-              - type: tile
-                entity: sensor.chargewise_away_charging_cost
-                name: Public
-                icon: mdi:ev-station
-              - type: tile
-                entity: sensor.chargewise_total_energy
-                name: Energy
-                icon: mdi:lightning-bolt
-              - type: tile
-                entity: sensor.chargewise_total_miles
-                name: Miles
-                icon: mdi:road-variant
+          - type: heading
+            heading: Cost breakdown
+          - type: tile
+            entity: sensor.chargewise_home_charging_cost
+            name: Home
+            icon: mdi:home-lightning-bolt
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_away_charging_cost
+            name: Public
+            icon: mdi:ev-station
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_total_energy
+            name: Energy
+            icon: mdi:lightning-bolt
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_total_miles
+            name: Miles
+            icon: mdi:road-variant
+            grid_options:
+              columns: 6
 
-      - title: Cost per mile
+      - type: grid
         cards:
+          - type: heading
+            heading: Cost per mile
           - type: gauge
             entity: sensor.chargewise_electric_cost_per_mile
             name: Electric
@@ -84,6 +83,8 @@ views:
               green: 0
               yellow: 10
               red: 20
+            grid_options:
+              columns: 6
           - type: gauge
             entity: sensor.chargewise_petrol_cost_per_mile
             name: Petrol
@@ -95,19 +96,52 @@ views:
               green: 0
               yellow: 10
               red: 20
+            grid_options:
+              columns: 6
 
-      - title: Status
+      - type: grid
         cards:
+          - type: heading
+            heading: Status & data freshness
           - type: tile
             entity: binary_sensor.chargewise_api
             name: API
             icon: mdi:server-network
+            grid_options:
+              columns: 6
           - type: tile
             entity: sensor.chargewise_session_count
             name: Charge sessions
             icon: mdi:counter
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_teslafi_last_sync
+            name: TeslaFi sync
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_octopus_last_sync
+            name: Octopus sync
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_fuel_prices_last_sync
+            name: Fuel prices sync
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_fuel_prices_week
+            name: Fuel price week
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_latest_charge
+            name: Latest charge recorded
+            icon: mdi:battery-charging
+            color: amber
           - type: history-graph
-            title: Saving trend
+            title: Saving trend (lifetime total, builds over time)
             hours_to_show: 720
             entities:
               - entity: sensor.chargewise_lifetime_saving

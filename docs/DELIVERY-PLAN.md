@@ -8,6 +8,44 @@
 
 ---
 
+## Status (12 Jul 2026) — post-ship annotation
+
+> The plan below (v0.1, 8 Jun 2026) is preserved exactly as written. This section and the inline **[DONE]** / **[PARKED]** / **[OUTSTANDING]** markers in §6 and §9 record what actually happened. `PROJECT-STATUS.md` is the authoritative current state.
+
+**ChargeWise is live.** v1 shipped on 11 July 2026 — not to Azure, but as a **LAN-only deployment on the Synology NAS**: two Docker containers, `chargewise-api` (FastAPI, port 8000) and `chargewise-scheduler` (daily incremental pipeline via `backend/scheduler.sh` with a 35-day rolling re-cost window), consumed by a Home Assistant dashboard. This deployment target was not in the original plan.
+
+### Phase completion vs the original plan
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Harness & scaffolding | **DONE** |
+| 1 | Data model & cost engine | **DONE** — but the golden reconciliation test is **OUTSTANDING** (see below and §9) |
+| 2 | Ingestion | **DONE** — and better than planned: a real **TeslaFi history API adapter** landed, so no CSV export was needed |
+| 3 | API + live polling | **DONE** — auth runs as `AUTH_DISABLED` on the trusted LAN; the scheduler is a NAS container, not a cloud job |
+| 4 | Standalone dashboard (Next.js) | **PARKED** — the HA dashboard serves the need |
+| 5 | Home Assistant dashboard | **DONE** — the actual v1 consumer |
+| 6 | Azure deployment | **PARKED** — re-scoped to the NAS (rationale below) |
+| 7 | OSS hardening & v1.0.0 release | **PARKED** |
+
+### The re-scope: NAS instead of Azure
+
+The plan assumed an internet-reachable, login-protected Azure deployment. In practice:
+
+- **Solo project, value first.** The point of v1 was to answer "what has the car really cost, and saved?" with trustworthy live numbers — public hosting added scope and cost without adding value to that answer.
+- **The laptop is mobile**, so it could not be the 24/7 host; the Synology NAS already runs 24/7 on the LAN with Docker.
+- Consequently v1 is **LAN-only** on the NAS, with authentication deliberately disabled (`AUTH_DISABLED`) inside the trusted network. Phases 4, 6 and 7 are *parked, not cancelled* — to be revisited only if still wanted.
+
+### What remains
+
+1. **Golden reconciliation test vs a real Octopus bill** — still the plan's accuracy gate (§7), and now demonstrably the most important open item (see the §9 annotation on the pence bug). It must come before further feature work.
+2. **Multi-era rate refinement** — `derive_iog_rate_periods` currently collapses each tariff agreement to a single min/max rate era.
+3. **mypy debt** — 22 errors in older files (new code is clean). Otherwise healthy: 55 backend tests passing, ruff clean.
+4. Next.js frontend, Azure deployment and OSS release hardening — parked as above.
+
+**Headline figures (verified 12 Jul 2026):** 4,403 sessions · electricity £9,027 · petrol equivalent £17,178 · **lifetime saving £8,152**.
+
+---
+
 ## 1. How to use this document
 
 This turns the PRD into something buildable: the engineering standards, the architecture and specs in enough detail to implement, the development harness (the scaffolding, tooling and tests that keep quality high), and a phased plan with clear "done" gates. It is deliberately implementation-ready but not yet code. Build begins only after sign-off.
@@ -174,20 +212,28 @@ The harness is what makes this a *high-quality* product rather than a script —
 Each phase ends at a demoable, tested increment with an explicit Definition of Done (DoD).
 
 **Phase 0 — Harness & scaffolding.** Repo, licence, docs skeleton, Docker Compose, Makefile, CI, pre-commit, sample fixtures, empty module structure. *DoD: `make dev` and `make test` run green on an empty skeleton; CI passes.*
+**[DONE]**
 
 **Phase 1 — Data model & cost engine.** Schema + repositories; pure cost engine with full unit tests incl. IOG dispatch logic and the golden reconciliation fixture. *DoD: engine prices sample sessions correctly; golden test within tolerance; 90%+ engine coverage.*
+**[DONE — with one exception: the golden reconciliation fixture was never built and remains OUTSTANDING.]** Two production bugs were found and fixed against real data post-ship: Octopus unit rates arrive in pence (now ÷100), and the store upsert now refreshes cost fields on re-run so sessions can be re-costed. See the §9 annotation.
 
 **Phase 2 — Ingestion.** TeslaFi CSV import (historical backfill), Octopus REST rates + GraphQL dispatches, GOV.UK fuel import; idempotency tests. *DoD: real history loads end-to-end into the DB; re-running imports causes no duplication.*
+**[DONE — delivered via the TeslaFi history API rather than CSV export.]** The adapter fetches in monthly windows with 429 backoff, retries on a count-checksum mismatch (responses can be partial under throttling), sorts results client-side (they arrive non-chronologically), treats the `date` field as UTC (verified across BST/GMT), and uses `chargerKWH` (wall energy) for costing.
 
 **Phase 3 — API + live polling.** FastAPI endpoints, auth, scheduled live TeslaFi poll + weekly fuel refresh + nightly recompute. *DoD: authenticated API returns correct summaries; scheduler runs; OpenAPI published.*
+**[DONE — auth ships as `AUTH_DISABLED` on the LAN; the scheduler runs as a daily NAS container (`backend/scheduler.sh`), not a cloud job.]**
 
 **Phase 4 — Standalone dashboard.** Next.js Overview/History/Savings/Settings on the design tokens; estimate labelling; responsive. *DoD: clean, glanceable UI passes smoke e2e; headline numbers match API.*
+**[PARKED — the HA dashboard (Phase 5) is the v1 consumer; revisit only if still wanted.]**
 
 **Phase 5 — Home Assistant dashboard.** HA package + Lovelace dashboard surfacing headline figures (via service API, recommended). *DoD: cards render in Alistair's HA with correct live values; follows HA best practices.*
+**[DONE — 16 REST sensors via `packages/chargewise.yaml` reading the NAS API; live in Alistair's HA.]**
 
 **Phase 6 — Azure deployment.** Container Apps + Azure Files volume + secrets; HTTPS + login live; deploy docs. *DoD: instance reachable behind login at near-zero idle cost; `DEPLOY.md` reproducible.*
+**[PARKED — deliberately re-scoped: v1 deployed LAN-only to the Synology NAS via `docker-compose.nas.yml`. See the Status section at the top.]**
 
 **Phase 7 — Open-source hardening & release.** README with screenshots, METHODOLOGY.md, SETUP-CREDENTIALS.md, contribution files, v1.0.0 tagged. *DoD: a third party can deploy from docs unaided; secret-scan clean; release published.*
+**[PARKED — repo is public (MIT) but the v1.0.0 hardening pass has not been done.]**
 
 ---
 
@@ -216,6 +262,13 @@ Each phase ends at a demoable, tested increment with an explicit Definition of D
 | Internet-facing auth adds scope | Keep built-in login minimal but correct; pluggable for stronger providers; HTTPS enforced |
 | Per-slot energy apportionment error | Cross-check vs Octopus consumption; document; keep within accuracy gate |
 | Scope creep to TCO | Held to PRD non-goals; extensible model leaves the door open |
+
+**Post-ship annotation (12 Jul 2026) — which risks materialised:**
+
+- **Cost-engine correctness — MATERIALISED.** Octopus unit rates arrive in **pence**, but the engine (and its unit tests) had encoded a pounds assumption: the first real backfill priced lifetime charging at ~£784k. All 43 unit tests were green throughout, because the tests shared the wrong assumption — **green tests proved internal consistency, not correctness**. Only real data exposed the bug. The mitigation listed above — the golden reconciliation test against a real bill — is exactly what would have caught it, and it was never built. The lesson stands validated and is now binding: **the golden reconciliation test must land before any further feature work.** (Fix: rates ÷100 in `derive_iog_rate_periods`, regression-tested; the store upsert also now refreshes cost fields on re-run, so corrected rates re-cost existing sessions.)
+- **Real credentials needed to validate — MATERIALISED as predicted.** Fixture-based development got everything green; the pence bug and the upsert re-costing gap only surfaced on validation against Alistair's real data.
+- **Per-slot energy apportionment — partially materialised in a different form.** Apportionment itself has caused no known error, but rate *attribution* has known accuracy caveats (recent-window-only dispatch feed; min/max rate-era collapse) — see `METHODOLOGY.md` §8. The dispatch caveat errs conservative (home costs overstated); the era collapse can err either way.
+- Internet-facing auth and TCO scope creep — **did not materialise**: v1 re-scoped to LAN-only with `AUTH_DISABLED`, and scope held to the PRD.
 
 ---
 

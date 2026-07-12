@@ -10,6 +10,20 @@
 
 ---
 
+## Status (12 Jul 2026) — v1 SHIPPED
+
+> **This PRD is preserved as written (8 Jun 2026). v1 went LIVE on 11–12 July 2026 with a deliberately re-scoped deployment.** See `PROJECT-STATUS.md` for the authoritative current state.
+>
+> **What shipped vs this PRD's scope:**
+> - **Shipped (LAN-only v1):** Docker on the Synology NAS — FastAPI `chargewise-api` plus a daily incremental scheduler. The **Home Assistant dashboard is the only front-end**, reading the ChargeWise API via 16 REST sensors. Full backfill to Feb 2022 via the TeslaFi history API (no CSV import needed), Octopus REST/GraphQL rate and dispatch ingestion, GOV.UK fuel prices, dispatch-aware cost engine per §8.
+> - **Parked, not abandoned:** the standalone **Next.js web dashboard**, **OAuth/Entra login** and **Azure hosting** (§10, §12, decisions 4, 6, 10, 12). v1 was re-scoped to LAN-only after a mentor review that prioritised shipped value over infrastructure. Revisit only if the internet-facing product is still wanted.
+>
+> **Verified headline figures (Feb 2022 → 12 Jul 2026, agent-verified):** 4,403 sessions · 26,735 kWh · 76,245 miles · electricity £9,027 vs petrol equivalent £17,178 → **lifetime saving £8,152** · 11.84 p/mile electric vs 22.53 p/mile petrol.
+>
+> The open questions in §17 are annotated below with their outcomes.
+
+---
+
 ## 1. Overview
 
 ChargeWise is an open-source tool that tells a Tesla owner, accurately and at a glance, **what it actually costs to run their car on electricity** — and **how much they are saving versus petrol** — both right now and across the whole life of ownership (from February 2022 onwards for Alistair).
@@ -304,7 +318,7 @@ A short visual style reference (colours, type scale, card patterns) will be prod
 2. **Database default** — **SQLite** to start, data layer abstracted for a later Postgres move.
 3. **Tech stack** — **FastAPI** core + **React/Next.js** front-end.
 4. **Standalone access** — **internet-reachable with login** (auth layer required, §12).
-5. **HA dashboard data** — HA **reads the ChargeWise API** (single source of truth).
+5. **HA dashboard data** — HA **reads the ChargeWise API** (single source of truth). *Confirmed in the shipped v1: option (b) won — 16 REST sensors in `packages/chargewise.yaml` read the NAS-hosted API.*
 6. **Auth provider** — **OAuth sign-in with Microsoft/Google** (no local passwords); pluggable for self-hosters.
 7. **Standing charge** — **excluded** from charging cost (it is a fixed home cost, not a cost of charging).
 8. **Vehicles** — Tesla #1 from **Feb 2022 to ~early August 2024**; Tesla #2 from **early August 2024 to present**. Combined lifetime totals across both.
@@ -315,8 +329,11 @@ A short visual style reference (colours, type scale, card patterns) will be prod
 
 **Still open (to resolve during build):**
 - **TeslaFi history API specifics** — endpoint confirmed (beta). Awaiting TeslaFi support (see `TESLAFI-SUPPORT-EMAIL.md`): exact JSON field names, multi-vehicle behaviour, pagination, rate limits, whether Supercharger actual-invoice cost is included, and beta change-notification.
+  > **ANSWERED (12 Jul 2026) — empirically; TeslaFi support never replied.** History is available via `history.php?command=charges` back to Feb 2022, so no support answer was ever needed. Key findings: `date` is UTC; `dateTo` is inclusive (capped at now); omitting dates returns full history; results arrive **non-chronologically** (sort client-side); responses can be **partial under throttling** (checksum `len(results)` vs `count`, retry); ~30 rapid calls then HTTP 429; `vin` field splits vehicles; `chargerKWH` = wall energy; `command=drives` returns 0 results; `command=chargeSummary` does not exist. Full detail in the resolution header of `TESLAFI-SUPPORT-EMAIL.md`. Note the Jan–mid-May 2026 data gap is a subscription lapse, not an API limitation.
 - **Azure tenant ID (GUID)** and **Entra app registration** (client ID + secret) — needed to wire Microsoft OAuth login.
+  > **DEFERRED (12 Jul 2026).** The auth provider decision is parked along with the internet-facing scope (standalone web app + Azure hosting). v1 shipped LAN-only with no login required.
 - **Octopus API key** — to be placed in Key Vault / local `.env` (never in chat) to enable live ingestion and the golden reconciliation test.
+  > **RESOLVED (12 Jul 2026) in part.** Key lives in the gitignored `backend/.env` and live ingestion runs daily on the NAS. The golden reconciliation test against a real Octopus bill remains the next accuracy milestone (see `PROJECT-STATUS.md`).
 
 ---
 

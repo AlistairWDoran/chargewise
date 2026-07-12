@@ -12,7 +12,7 @@ Open-source tool showing the true cost of running a Tesla on electricity and the
 ## 2. IT'S LIVE (11 Jul 2026)
 
 **Production:** Docker on the Synology NAS (24/7) — `chargewise-api` (port 8000) + `chargewise-scheduler` (daily incremental pipeline, 35-day rolling re-cost). Deployed via `docker-compose.nas.yml` at `/volume1/docker/chargewise/`.
-**Consumer:** Home Assistant dashboard "ChargeWise" (`/chargewise-ev/chargewise`) — 11 REST sensors via `packages/chargewise.yaml`, secrets point at `http://192.168.1.18:8000`.
+**Consumer:** Home Assistant dashboard "ChargeWise" (`/chargewise-ev/chargewise`) — 16 REST sensors via `packages/chargewise.yaml`, secrets point at `http://192.168.1.18:8000`.
 
 **Lifetime figures (Feb 2022 → 12 Jul 2026, agent-verified 16/16 checks):** 4,403 sessions · 26,735 kWh · 76,245 miles · electricity £9,027 (home £7,869 / public £1,158) · petrol equivalent £17,178 · **saving £8,152** · 11.84 vs 22.53 p/mile.
 
@@ -36,7 +36,7 @@ Open-source tool showing the true cost of running a Tesla on electricity and the
 
 ## 5. Accuracy caveats (honest state)
 
-- Home costs likely **overstated** (conservative): Octopus dispatch feed is recent-window only (10 dispatches), so historical daytime smart-charges billed at peak; `derive_iog_rate_periods` collapses each tariff agreement to one min/max era (2022–24 VAR era approximate).
+- **Dispatch-feed caveat (conservative):** Octopus dispatch feed is recent-window only (10 dispatches), so historical daytime smart-charges are billed at peak — overstates home costs. **Rate-era collapse (direction not guaranteed):** `derive_iog_rate_periods` reduces each tariff agreement to one min/max pair — peak slots overpriced, off-peak slots potentially underpriced (2022–24 VAR era approximate).
 - **TeslaFi data gap Jan–mid-May 2026** — subscription lapse (confirmed by Alistair); unrecoverable from TeslaFi.
 - Golden reconciliation test vs a real Octopus bill: **still to do** — next accuracy milestone.
 
@@ -44,7 +44,7 @@ Open-source tool showing the true cost of running a Tesla on electricity and the
 
 1. **Golden reconciliation test** (accuracy gate from the delivery plan).
 2. Multi-era rate refinement (per-era rates rather than min/max collapse).
-3. mypy debt in older files (~24 errors); new code is clean.
+3. mypy debt in older files (22 errors); new code is clean.
 4. Next.js frontend + Azure deploy — **deliberately parked**; LAN v1 shipped. Revisit only if still wanted.
 5. Vehicles named "Tesla 1" (LRW…3329) and "Friday" (XP7…9220) via `--vehicle-map`.
 

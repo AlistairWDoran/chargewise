@@ -1,3 +1,24 @@
+# RESOLVED (12 Jul 2026) — no reply ever received; all questions answered empirically
+
+TeslaFi support never replied to this email. Every open question below was settled by probing the API directly during the v1 build. The findings, which supersede the questions in the draft:
+
+- **Endpoint:** `history.php?command=charges&dateFrom&dateTo` works and returns full history back to Feb 2022.
+- **Timestamps:** `date` is UTC.
+- **Date range:** `dateTo` is inclusive and capped at now; omitting both dates returns the full history.
+- **Ordering:** results arrive **non-chronologically** — always sort client-side.
+- **Partial responses:** under throttling, responses can be **truncated** — checksum `len(results)` against the payload `count` and retry on mismatch.
+- **Rate limits:** roughly 30 rapid calls, then HTTP 429 — back off.
+- **Other commands:** `command=chargeSummary` does not exist; `command=drives` returns 0 results (possibly token permissions).
+- **Multi-vehicle:** the `vin` field on each record splits vehicles.
+- **Fields:** `chargerKWH` = energy at the wall; `superCost`/`travelCost` carry away-charging costs.
+- **Data gap:** the Jan–mid-May 2026 gap is a TeslaFi **subscription lapse**, not an API issue, and is unrecoverable from TeslaFi.
+
+**Implementation:** `backend/chargewise/ingest/teslafi_history.py` (sorts, checksums, retries and backs off per the above).
+
+The draft below is retained for the record only — do not send it.
+
+---
+
 # Draft email to TeslaFi support
 
 **To:** TeslaFi support (via Help menu / https://support.teslafi.com/?show_helpdesk_form=true)

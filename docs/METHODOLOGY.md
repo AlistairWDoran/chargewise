@@ -20,7 +20,7 @@ Home sessions are costed slot-by-slot, because IOG pricing changes within a sess
    - **Standard** — otherwise it is billed at the **peak/standard** rate.
 4. **Slot cost** = slot energy (kWh) × applicable rate. **Session cost** = sum of slot costs.
 
-The rate values for a slot are resolved from the tariff's **rate history** valid at that moment, so sessions are always priced at the rate that actually applied — even after tariff changes. Example real values (region H, captured 2026-06-15): off-peak **£0.069/kWh**, peak **£0.303714/kWh**.
+The rate values for a slot are resolved from the tariff's **rate history** valid at that moment, so sessions are priced at the rate that applied at the time — even across tariff changes. One known approximation applies within long-running tariff agreements: see §8. Example real values (region H, captured 2026-06-15): off-peak **£0.069/kWh**, peak **£0.303714/kWh**. (Octopus's API returns unit rates in **pence**; the engine converts to pounds on ingestion — this is regression-tested.)
 
 > Worked example: a 4 kWh session from 23:00–00:00 spans one peak slot (23:00–23:30) and one core off-peak slot (23:30–00:00). Cost = 2 kWh × £0.303714 + 2 kWh × £0.069 = **£0.7454**.
 
@@ -54,10 +54,18 @@ Internally the engine keeps full precision and rounds only for display/reconcili
 
 ## 7. Accuracy target
 
-The headline accuracy gate: computed home-charging cost should reconcile to within ~1–2% of the corresponding Octopus bill for a test month. This is enforced by a golden reconciliation test in CI.
+The headline accuracy gate: computed home-charging cost should reconcile to within ~1–2% of the corresponding Octopus bill for a test month. This will be enforced by a golden reconciliation test in CI; **as of July 2026 that test has not yet been built** and remains the next accuracy milestone. Until it lands, the figures should be read alongside the limitations in §8 — the dispatch-feed limitation errs conservative (home costs overstated, savings understated); the rate-era collapse can err in either direction.
 
 ## 8. Known limitations
+
+### Methodology limitations
 
 - Per-slot energy is apportioned by duration unless half-hourly consumption is available; this introduces a small error only at slot boundaries.
 - Octopus smart-meter data can lag or have gaps; TeslaFi energy is the primary source, Octopus consumption a cross-check.
 - IOG dispatch attribution uses the Octopus dispatch feed; if a dispatch is missing, that slot falls back to the standard rate (conservative).
+- **The dispatch feed only covers a recent window.** Octopus exposes only the most recent smart-charge dispatches, so *historical* daytime smart charges cannot be attributed to a dispatch and are billed at the peak rate instead of off-peak. Directionally this **overstates home costs and therefore understates the saving** — the error is conservative, never flattering.
+- **Rate eras are collapsed within each tariff agreement.** `derive_iog_rate_periods` reduces each tariff agreement to a single off-peak/peak pair, taking the minimum observed rate as off-peak and the maximum as peak. Where rates changed *within* an agreement — notably the 2022–24 variable era — the applied rates are approximate: peak slots are priced at the highest rate of the era (overstating their cost), while off-peak slots are priced at the lowest (understating theirs where the off-peak rate rose within an agreement). **The net direction of this approximation is not guaranteed.** Per-era rate refinement is a planned improvement.
+
+### Data limitations (not methodology)
+
+- **TeslaFi gap, January to mid-May 2026.** The TeslaFi subscription lapsed for this period, so no charging sessions were recorded and none appear in the totals. This is a gap in the source data, not an error in the calculation, and it is unrecoverable from TeslaFi.

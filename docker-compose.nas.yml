@@ -2,7 +2,7 @@
 #
 # Deploy as a Container Manager "Project" pointed at this file, with the
 # repo's backend/ folder, a .env and (optionally) an existing data/ SQLite
-# DB alongside it. See docs/DEPLOY-SYNOLOGY.md.
+# DB alongside it. See docs/PROJECT-STATUS.md (deployment + access details).
 #
 # Services share one image:
 #   api        — serves the dashboard/HA on port 8000, restarts on boot
