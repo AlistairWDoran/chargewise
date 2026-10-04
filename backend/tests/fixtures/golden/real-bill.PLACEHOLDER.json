@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "placeholder",
+  "description": "PLACEHOLDER for the real-bill golden fixture (METHODOLOGY.md 7 accuracy gate). While status is 'placeholder' the golden reconciliation test SKIPS this file with an explicit reason — it never silently passes. To produce the real fixture, run scripts/export-golden-fixture.py on the LAN (see its --help) with the bill month and the bill's home-charging kWh/cost figures from the Octopus bill PDF, which writes <YYYY-MM>.real.json beside this file with status 'real' (set automatically when bill figures are supplied). That file is git-ignored and kept locally: the golden test picks it up on the machine that holds it.",
+  "month": null,
+  "timezone": "Europe/London",
+  "tariff": {
+    "name": "Intelligent Octopus Go",
+    "tariff_code": "E-1R-INTELLI-VAR-24-10-29-H",
+    "region": "H"
+  },
+  "rate_periods": [],
+  "dispatches": [],
+  "sessions": [],
+  "bill": {
+    "month": null,
+    "billed_kwh": null,
+    "billed_cost_inc_vat_gbp": null,
+    "billed_cost_exc_vat_gbp": null,
+    "tolerance_pct": 2.0
+  }
+}

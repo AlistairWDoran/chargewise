@@ -1,0 +1,290 @@
+# ChargeWise — Home Assistant REST sensors
+#
+# Drop-in package that reads the ChargeWise API and exposes the lifetime
+# summary as sensors the dashboard (ha/dashboards/chargewise.yaml) consumes.
+# It also raises a persistent notification when the daily ingestion has a
+# problem (see the `automation:` block at the end).
+#
+# Enable packages once in configuration.yaml:
+#     homeassistant:
+#       packages: !include_dir_named packages
+# then place this file at  <config>/packages/chargewise.yaml
+#
+# Set the URL (and, if your API has auth enabled, a bearer token) in secrets.yaml
+# — see ha/secrets.example.yaml. On a LAN-only instance running with
+# AUTH_DISABLED=true you can omit the Authorization header entirely.
+#
+# `rest:` is a YAML-only integration: it loads at startup and needs a Home
+# Assistant restart (or a YAML config reload of REST) to take effect.
+
+rest:
+  # --- Lifetime summary: one poll feeds many sensors -----------------------
+  - resource: !secret chargewise_summary_url   # e.g. http://<chargewise-host>:8000/api/summary/lifetime
+    method: GET
+    scan_interval: 1800                         # summary changes slowly; poll every 30 min
+    timeout: 30
+    headers:
+      Accept: application/json
+      # Authorization: !secret chargewise_auth  # uncomment if the API has auth enabled
+    sensor:
+      - name: "ChargeWise Lifetime Cost"
+        unique_id: chargewise_lifetime_cost_gbp
+        value_template: "{{ value_json.total_cost_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:cash
+
+      - name: "ChargeWise Lifetime Saving"
+        unique_id: chargewise_lifetime_saving_gbp
+        value_template: "{{ value_json.saving_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:piggy-bank
+
+      - name: "ChargeWise Petrol Equivalent Cost"
+        unique_id: chargewise_petrol_equiv_gbp
+        value_template: "{{ value_json.petrol_equiv_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:fuel
+
+      - name: "ChargeWise Home Charging Cost"
+        unique_id: chargewise_home_cost_gbp
+        value_template: "{{ value_json.home_cost_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:home-lightning-bolt
+
+      - name: "ChargeWise Away Charging Cost"
+        unique_id: chargewise_away_cost_gbp
+        value_template: "{{ value_json.away_cost_gbp | default(0) | round(2) }}"
+        unit_of_measurement: "GBP"
+        device_class: monetary
+        state_class: total
+        icon: mdi:ev-station
+
+      - name: "ChargeWise Total Energy"
+        unique_id: chargewise_total_energy_kwh
+        value_template: "{{ value_json.total_energy_kwh | default(0) | round(2) }}"
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        icon: mdi:lightning-bolt
+
+      - name: "ChargeWise Total Miles"
+        unique_id: chargewise_total_miles
+        value_template: "{{ value_json.total_miles | default(0) | round(1) }}"
+        unit_of_measurement: "mi"
+        state_class: total
+        icon: mdi:road-variant
+
+      - name: "ChargeWise Electric Cost per Mile"
+        unique_id: chargewise_electric_pence_per_mile
+        value_template: "{{ value_json.electric_pence_per_mile | default(0) | round(2) }}"
+        unit_of_measurement: "p/mi"
+        state_class: measurement
+        icon: mdi:car-electric
+
+      - name: "ChargeWise Petrol Cost per Mile"
+        unique_id: chargewise_petrol_pence_per_mile
+        value_template: "{{ value_json.petrol_pence_per_mile | default(0) | round(2) }}"
+        unit_of_measurement: "p/mi"
+        state_class: measurement
+        icon: mdi:gas-station
+
+      - name: "ChargeWise Session Count"
+        unique_id: chargewise_session_count
+        value_template: "{{ value_json.session_count | default(0) }}"
+        state_class: total_increasing
+        icon: mdi:counter
+
+  # --- Health check: simple up/down signal for the API ---------------------
+  - resource: !secret chargewise_health_url    # e.g. http://<chargewise-host>:8000/health
+    method: GET
+    scan_interval: 300
+    timeout: 10
+    headers:
+      Accept: application/json
+    binary_sensor:
+      - name: "ChargeWise API"
+        unique_id: chargewise_api_online
+        device_class: connectivity
+        value_template: "{{ value_json.status == 'ok' }}"
+
+  # --- Per-source sync status: when each feed last succeeded ---------------
+  # Sync success is distinct from data freshness: TeslaFi can sync cleanly
+  # while its own logging is stalled, which is
+  # exactly what "Latest charge" going stale reveals.
+  - resource: !secret chargewise_status_url    # e.g. http://<chargewise-host>:8000/api/status
+    method: GET
+    scan_interval: 900
+    timeout: 30
+    headers:
+      Accept: application/json
+    sensor:
+      - name: "ChargeWise TeslaFi Last Sync"
+        unique_id: chargewise_sync_teslafi
+        device_class: timestamp
+        value_template: "{{ value_json.teslafi.last_success_utc }}"
+        availability: "{{ value_json.teslafi.last_success_utc is not none }}"
+        icon: mdi:car-connected
+
+      - name: "ChargeWise Octopus Last Sync"
+        unique_id: chargewise_sync_octopus
+        device_class: timestamp
+        value_template: "{{ value_json.octopus.last_success_utc }}"
+        availability: "{{ value_json.octopus.last_success_utc is not none }}"
+        icon: mdi:lightning-bolt-circle
+
+      - name: "ChargeWise Fuel Prices Last Sync"
+        unique_id: chargewise_sync_fuel
+        device_class: timestamp
+        value_template: "{{ value_json.fuel.last_success_utc }}"
+        availability: "{{ value_json.fuel.last_success_utc is not none }}"
+        icon: mdi:gas-station
+
+      - name: "ChargeWise Latest Charge"
+        unique_id: chargewise_latest_charge
+        device_class: timestamp
+        value_template: "{{ value_json.teslafi.latest_charge_utc }}"
+        availability: "{{ value_json.teslafi.latest_charge_utc is not none }}"
+        icon: mdi:battery-charging
+
+      - name: "ChargeWise Fuel Prices Week"
+        unique_id: chargewise_fuel_week
+        value_template: "{{ value_json.fuel.latest_week }}"
+        availability: "{{ value_json.fuel.latest_week is not none }}"
+        icon: mdi:calendar-week
+
+      # Why each feed's most recent run failed: "OK" only when the API says
+      # there is no error, the error text when there is one, "Not reported"
+      # when the answer has no such field (an older API, an unexpected body).
+      # The API keeps the text under 255 characters, the longest state HA will
+      # store; the slice is a guard so a longer one can never blank the sensor.
+      - name: "ChargeWise TeslaFi Last Error"
+        unique_id: chargewise_error_teslafi
+        value_template: >-
+          {% set e = ((value_json | default({})).teslafi | default({})).last_error %}
+          {{ 'OK' if e is none else e[:255] if e is string else 'Not reported' }}
+        icon: mdi:car-connected
+
+      - name: "ChargeWise Octopus Last Error"
+        unique_id: chargewise_error_octopus
+        value_template: >-
+          {% set e = ((value_json | default({})).octopus | default({})).last_error %}
+          {{ 'OK' if e is none else e[:255] if e is string else 'Not reported' }}
+        icon: mdi:lightning-bolt-circle
+
+      - name: "ChargeWise Fuel Prices Last Error"
+        unique_id: chargewise_error_fuel
+        value_template: >-
+          {% set e = ((value_json | default({})).fuel | default({})).last_error %}
+          {{ 'OK' if e is none else e[:255] if e is string else 'Not reported' }}
+        icon: mdi:gas-station
+
+    binary_sensor:
+      # Fails closed: off only when the API answers healthy: true. Anything
+      # else is a problem — healthy: false (a feed's last run failed, or a feed
+      # has not succeeded for 36 hours, which also catches the daily job not
+      # running at all), an API too old to send the field, or a body that is
+      # not the expected JSON. The `is defined` guard matters: HA treats a
+      # template that raises as "off". An API that cannot be reached at all
+      # makes this sensor unavailable, which the automation below alerts on.
+      - name: "ChargeWise Sync Problem"
+        unique_id: chargewise_sync_problem
+        device_class: problem
+        value_template: "{{ not (value_json is defined and value_json.healthy is true) }}"
+
+# --- Alerting: tell someone when the daily ingestion is broken ---------------
+# The job once failed every day for months with nothing but a log line to show
+# for it. This keeps one persistent notification in step with what the sensors
+# say, and fails closed — not being able to see the API is itself a problem:
+#   - API unreachable (either sensor unavailable/unknown, or /health not "ok")
+#     for 30 minutes            -> "ChargeWise API unreachable"
+#   - sync problem on for 30 minutes -> "ChargeWise sync problem" + error texts
+#   - sync problem off and API on    -> notification dismissed
+# It looks on every change of either sensor and again every 5 minutes. The
+# 5-minute look is what makes it reliable: a state trigger fires only on a
+# change, so it would miss a problem that predates a Home Assistant restart
+# (which also wipes persistent notifications). The cost is that a notification
+# dismissed by hand comes back while the problem lasts. Swap the create action
+# for a notify.* service to get it on your phone as well.
+automation:
+  - id: chargewise_sync_problem_notification
+    alias: "ChargeWise: sync problem notification"
+    description: >-
+      Raise a persistent notification when ChargeWise has reported a sync
+      problem, or its API has been unreachable, for 30 minutes; dismiss it on
+      recovery.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.chargewise_sync_problem
+          - binary_sensor.chargewise_api
+      - trigger: time_pattern
+        minutes: "/5"
+    actions:
+      - choose:
+          - conditions:
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity_id: binary_sensor.chargewise_sync_problem
+                    state:
+                      - "unavailable"
+                      - "unknown"
+                    for: "00:30:00"
+                  - condition: state
+                    entity_id: binary_sensor.chargewise_api
+                    state:
+                      - "off"
+                      - "unavailable"
+                      - "unknown"
+                    for: "00:30:00"
+            sequence:
+              - action: persistent_notification.create
+                data:
+                  notification_id: chargewise_sync_problem
+                  title: "ChargeWise API unreachable"
+                  message: |-
+                    Home Assistant has had no proper answer from the ChargeWise API for at least 30 minutes, so it cannot tell whether the daily ingestion is working, and the dashboard figures are not updating.
+
+                    - **API (/health):** {{ states('binary_sensor.chargewise_api') }}
+                    - **Sync status (/api/status):** {{ states('binary_sensor.chargewise_sync_problem') }}
+
+                    Check that the `chargewise-api` container is running and that the `chargewise_*_url` secrets still point at it.
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.chargewise_sync_problem
+                state: "on"
+                for: "00:30:00"
+            sequence:
+              - action: persistent_notification.create
+                data:
+                  notification_id: chargewise_sync_problem
+                  title: "ChargeWise sync problem"
+                  message: |-
+                    The daily ChargeWise ingestion has had a problem for at least 30 minutes, so the dashboard figures may be out of date.
+
+                    - **TeslaFi:** {{ states('sensor.chargewise_teslafi_last_error') }} (last success: {{ states('sensor.chargewise_teslafi_last_sync') }})
+                    - **Octopus:** {{ states('sensor.chargewise_octopus_last_error') }} (last success: {{ states('sensor.chargewise_octopus_last_sync') }})
+                    - **Fuel prices:** {{ states('sensor.chargewise_fuel_prices_last_error') }} (last success: {{ states('sensor.chargewise_fuel_prices_last_sync') }})
+
+                    A feed showing OK with a last success more than 36 hours ago means the job has not run, or stopped before reaching that feed. Check the `chargewise-scheduler` container log. Feeds showing "Not reported" mean the API answered without the health fields: it is an older version, or its answer was not understood.
+          - conditions:
+              - condition: state
+                entity_id: binary_sensor.chargewise_sync_problem
+                state: "off"
+              - condition: state
+                entity_id: binary_sensor.chargewise_api
+                state: "on"
+            sequence:
+              - action: persistent_notification.dismiss
+                data:
+                  notification_id: chargewise_sync_problem

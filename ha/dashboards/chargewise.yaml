@@ -1,0 +1,163 @@
+# ChargeWise — Home Assistant dashboard
+#
+# Holds the same cards and badges as the project's own live dashboard,
+# including the sync-problem badge, "Daily sync" tile and "Last run, per feed"
+# card (they need the sensors in the current packages/chargewise.yaml). A
+# dashboard edited in the UI drifts from this file — section and card order
+# can differ — so pasting this file over a live one undoes any such layout.
+# Modern sections format: HA requires `type: grid` sections with `heading`
+# cards (the older per-section `title:` key renders as an empty view), and a
+# dashboard url_path must contain a hyphen.
+#
+# Add it as a new dashboard: Settings → Dashboards → Add dashboard → open it →
+# Edit → Raw configuration editor → paste the `views:` block below.
+#
+# Entity IDs are derived from the sensor names in packages/chargewise.yaml.
+
+title: ChargeWise
+views:
+  - title: Overview
+    path: chargewise
+    icon: mdi:car-electric
+    type: sections
+    max_columns: 3
+    badges:
+      - entity: binary_sensor.chargewise_api
+      - entity: binary_sensor.chargewise_sync_problem
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Lifetime savings vs petrol
+          - type: tile
+            entity: sensor.chargewise_lifetime_saving
+            name: Saved vs petrol
+            icon: mdi:piggy-bank
+            color: green
+          - type: tile
+            entity: sensor.chargewise_lifetime_cost
+            name: Spent on electricity
+            icon: mdi:cash
+          - type: tile
+            entity: sensor.chargewise_petrol_equivalent_cost
+            name: Petrol would have cost
+            icon: mdi:fuel
+            color: orange
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Cost breakdown
+          - type: tile
+            entity: sensor.chargewise_home_charging_cost
+            name: Home
+            icon: mdi:home-lightning-bolt
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_away_charging_cost
+            name: Public
+            icon: mdi:ev-station
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_total_energy
+            name: Energy
+            icon: mdi:lightning-bolt
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_total_miles
+            name: Miles
+            icon: mdi:road-variant
+            grid_options:
+              columns: 6
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Cost per mile
+          - type: gauge
+            entity: sensor.chargewise_electric_cost_per_mile
+            name: Electric
+            unit: p/mi
+            min: 0
+            max: 30
+            needle: true
+            severity:
+              green: 0
+              yellow: 10
+              red: 20
+            grid_options:
+              columns: 6
+          - type: gauge
+            entity: sensor.chargewise_petrol_cost_per_mile
+            name: Petrol
+            unit: p/mi
+            min: 0
+            max: 30
+            needle: true
+            severity:
+              green: 0
+              yellow: 10
+              red: 20
+            grid_options:
+              columns: 6
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Status & data freshness
+          - type: tile
+            entity: binary_sensor.chargewise_api
+            name: API
+            icon: mdi:server-network
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_session_count
+            name: Charge sessions
+            icon: mdi:counter
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_teslafi_last_sync
+            name: TeslaFi sync
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_octopus_last_sync
+            name: Octopus sync
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_fuel_prices_last_sync
+            name: Fuel prices sync
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_fuel_prices_week
+            name: Fuel price week
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: sensor.chargewise_latest_charge
+            name: Latest charge recorded
+            icon: mdi:battery-charging
+            color: amber
+          - type: tile
+            entity: binary_sensor.chargewise_sync_problem
+            name: Daily sync
+            color: red
+          - type: markdown
+            content: |-
+              **Last run, per feed**
+              - TeslaFi: {{ states('sensor.chargewise_teslafi_last_error') }}
+              - Octopus: {{ states('sensor.chargewise_octopus_last_error') }}
+              - Fuel prices: {{ states('sensor.chargewise_fuel_prices_last_error') }}
+          - type: history-graph
+            title: Saving trend (lifetime total, builds over time)
+            hours_to_show: 720
+            entities:
+              - entity: sensor.chargewise_lifetime_saving
+                name: Saved vs petrol

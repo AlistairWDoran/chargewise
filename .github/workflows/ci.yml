@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Type-check
+        run: mypy chargewise
+      - name: Tests
+        run: pytest --cov=chargewise --cov-report=term-missing --cov-fail-under=85
+
+  golden-reconciliation:
+    # The accuracy gate (METHODOLOGY §7), in its own job so it runs even while
+    # the backend job carries pre-existing mypy/coverage debt. -rs makes the
+    # pass/skip status and skip reason (e.g. "awaiting real Octopus bill
+    # figures") visible in the log.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - name: Golden reconciliation gate
+        run: pytest tests/test_golden_reconciliation.py -rs
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # Required by gitleaks-action to scan pull requests.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
